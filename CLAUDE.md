@@ -27,7 +27,19 @@ Claude never builds, flashes, commits, or pushes. The user does all of these (co
 The filter is a **2nd-order Biquad IIR (Direct Form I)** implemented in the TIM6 ISR using fixed-point Q15 arithmetic. No DSP libraries. All peripheral setup uses bare-metal register writes inside `USER CODE BEGIN/END` blocks (HAL calls for init scaffolding are acceptable, HAL peripheral APIs are not).
 
 ### Python Automation
-Lives in the repo root. Scripts control instruments via serial/SCPI and produce a Bode plot:
+Verification scripts live **alongside their requirements doc**, not in the repo root:
+
+```
+Docs/requirements/
+  1-peripheral-pinout/
+    README.md              ← requirements doc
+    test_passthrough.py    ← verifies the requirement
+  2-iir-filter/
+    README.md
+    test_bode.py
+```
+
+Scripts control instruments via serial/SCPI:
 - **FY6800**: Serial at 115200 baud on `/dev/ttyUSB0` (busid 7-2, VID 1a86:7523).
 - **SDS824X HD**: SCPI over TCP at `192.168.0.87:5025`.
 
@@ -44,12 +56,12 @@ See `FY6800.md` and `SDS824X.md` for protocol details.
 ## Development Workflow
 
 Per DEMO.md:
-1. Write requirements doc `Docs/requirements/<N>-<slug>.md`
+1. Write requirements doc `Docs/requirements/<N>-<slug>/README.md`
 2. `git add` the doc — user commits (GPG-signed)
 3. Create GitHub issue referencing the doc
 4. Create feature branch
-5. Implement on branch
-6. User builds in STM32CubeIDE and tests on hardware
+5. Implement on branch; write Python verification script at `Docs/requirements/<N>-<slug>/<script>.py`
+6. User builds in STM32CubeIDE and tests on hardware; run verification script
 7. User commits, opens PR, merges
 
 ## Hardware
