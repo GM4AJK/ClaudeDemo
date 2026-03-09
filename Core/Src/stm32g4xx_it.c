@@ -205,11 +205,8 @@ void TIM6_DAC_IRQHandler(void)
 	/* Clear update interrupt flag */
 	TIM6->SR = 0;
 
-	/* ADC runs continuously; just read the latest conversion result */
-	uint32_t sample = ADC1->DR;
-
-	/* Pass-through to DAC (IIR filter added in next req) */
-	DAC1->DHR12R1 = sample;
+	/* Diagnostic: fixed midscale output — expect ~1.65 V DC on PA4 */
+	DAC1->DHR12R1 = 2048;
 }
 
 /* USER CODE END 1 */
