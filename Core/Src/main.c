@@ -215,8 +215,8 @@ static void ADC1_Init(void)
 
 static void DAC1_Init(void)
 {
-	/* Enable DAC1 clock */
-	RCC->APB1ENR1 |= RCC_APB1ENR1_DAC1EN;
+	/* Enable DAC1 clock (DAC1 is on AHB2 on STM32G431) */
+	RCC->AHB2ENR |= RCC_AHB2ENR_DAC1EN;
 
 	/* PA4 → analogue mode */
 	GPIOA->MODER |= (3UL << GPIO_MODER_MODE4_Pos);
