@@ -49,7 +49,9 @@
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void ADC1_Init(void);
+static void DAC1_Init(void);
+static void TIM6_Init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -87,7 +89,9 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
-
+  ADC1_Init();
+  DAC1_Init();
+  TIM6_Init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -167,6 +171,86 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+static void ADC1_Init(void)
+{
+	/* ADC clock: synchronous HCLK/4 = 42 MHz (within 60 MHz max) */
+	RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
+	ADC12_COMMON->CCR = (2UL << ADC_CCR_CKMODE_Pos);
+
+	/* PA0 → analogue mode (no pull, no digital buffer) */
+	GPIOA->MODER |= (3UL << GPIO_MODER_MODE0_Pos);
+
+	/* Exit deep power-down, enable internal voltage regulator */
+	ADC1->CR = 0;
+	ADC1->CR = ADC_CR_ADVREGEN;
+	/* Wait ≥20 µs for regulator startup (~3360 cycles @ 168 MHz) */
+	for (volatile uint32_t i = 0; i < 4000; i++)
+	{
+	}
+
+	/* Single-ended input calibration */
+	ADC1->CR &= ~ADC_CR_ADCALDIF;
+	ADC1->CR |= ADC_CR_ADCAL;
+	while (ADC1->CR & ADC_CR_ADCAL)
+	{
+	}
+
+	/* Software trigger, 12-bit resolution, right-aligned */
+	ADC1->CFGR = 0;
+
+	/* CH1 sampling time: 47.5 ADC clk cycles (SMP=4) */
+	ADC1->SMPR1 = (4UL << ADC_SMPR1_SMP1_Pos);
+
+	/* Regular sequence: 1 conversion, channel 1 */
+	ADC1->SQR1 = (1UL << ADC_SQR1_SQ1_Pos);
+
+	/* Enable ADC and wait for it to be ready */
+	ADC1->ISR = ADC_ISR_ADRDY;
+	ADC1->CR |= ADC_CR_ADEN;
+	while (!(ADC1->ISR & ADC_ISR_ADRDY))
+	{
+	}
+}
+
+static void DAC1_Init(void)
+{
+	/* Enable DAC1 clock */
+	RCC->APB1ENR1 |= RCC_APB1ENR1_DAC1EN;
+
+	/* PA4 → analogue mode */
+	GPIOA->MODER |= (3UL << GPIO_MODER_MODE4_Pos);
+
+	/* Enable CH1, output buffer on, no hardware trigger */
+	DAC1->CR = DAC_CR_EN1;
+
+	/* Initial output: midscale (1.65 V) */
+	DAC1->DHR12R1 = 2048;
+}
+
+static void TIM6_Init(void)
+{
+	/* Enable TIM6 clock */
+	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM6EN;
+
+	/* 168 MHz / 1 / 21000 = 8000 Hz exactly */
+	TIM6->PSC = 0;
+	TIM6->ARR = 20999;
+
+	/* Force load of PSC and ARR, then clear the resulting UIF */
+	TIM6->EGR = TIM_EGR_UG;
+	TIM6->SR  = 0;
+
+	/* Enable update interrupt */
+	TIM6->DIER = TIM_DIER_UIE;
+
+	/* NVIC: highest priority */
+	NVIC_SetPriority(TIM6_DAC_IRQn, 0);
+	NVIC_EnableIRQ(TIM6_DAC_IRQn);
+
+	/* Start counter */
+	TIM6->CR1 = TIM_CR1_CEN;
+}
 
 /* USER CODE END 4 */
 

@@ -200,4 +200,24 @@ void SysTick_Handler(void)
 
 /* USER CODE BEGIN 1 */
 
+void TIM6_DAC_IRQHandler(void)
+{
+	/* Clear update interrupt flag */
+	TIM6->SR = 0;
+
+	/* Start ADC1 conversion (software trigger) */
+	ADC1->CR |= ADC_CR_ADSTART;
+
+	/* Poll for end of conversion (~1.4 µs at 42 MHz ADC clock, 47.5+12.5 cycles) */
+	while (!(ADC1->ISR & ADC_ISR_EOC))
+	{
+	}
+
+	/* Read result — reading DR clears EOC */
+	uint32_t sample = ADC1->DR;
+
+	/* Pass-through: write sample directly to DAC (IIR filter added in next req) */
+	DAC1->DHR12R1 = sample;
+}
+
 /* USER CODE END 1 */
