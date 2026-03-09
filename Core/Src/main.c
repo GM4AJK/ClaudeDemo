@@ -89,8 +89,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   /* --- Enable peripheral clocks --- */
-  RCC->AHB2ENR  |= RCC_AHB2ENR_ADC12EN;
-  RCC->APB1ENR1 |= RCC_APB1ENR1_DAC1EN | RCC_APB1ENR1_TIM6EN;
+  RCC->AHB2ENR  |= RCC_AHB2ENR_ADC12EN | RCC_AHB2ENR_DAC1EN;
+  RCC->APB1ENR1 |= RCC_APB1ENR1_TIM6EN;
 
   /* --- PA0 (ADC1 IN1) and PA4 (DAC1 OUT1): analogue mode --- */
   GPIOA->MODER |= (3U << (0U * 2U)) | (3U << (4U * 2U));
