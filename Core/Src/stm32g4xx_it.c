@@ -200,31 +200,16 @@ void SysTick_Handler(void)
 
 /* USER CODE BEGIN 1 */
 
-/* DIAGNOSTIC: 80-point sine table at 8 kHz → 100 Hz output, centred at DAC midscale */
-static const uint16_t sine_table[80] = {
-	2048, 2208, 2367, 2522, 2670, 2811, 2942, 3061, 3166, 3256,
-	3329, 3384, 3420, 3437, 3435, 3413, 3372, 3312, 3235, 3142,
-	3033, 2910, 2776, 2631, 2479, 2321, 2160, 1997, 1835, 1676,
-	1521, 1373, 1234, 1105,  988,  884,  794,  720,  663,  623,
-	 601,  598,  613,  647,  698,  765,  847,  943, 1050, 1167,
-	1291, 1420, 1552, 1683, 1814, 1940, 2059, 2170, 2270, 2357,
-	2430, 2487, 2527, 2549, 2554, 2540, 2509, 2461, 2397, 2318,
-	2227, 2125, 2014, 1896, 1774, 1650, 1527, 1406, 1290, 1181
-};
-
 void TIM6_DAC_IRQHandler(void)
 {
-	static uint32_t idx = 0;
-
 	/* Clear update interrupt flag */
 	TIM6->SR = 0;
 
-	/* Output next sine sample directly — ADC bypassed for DAC path diagnostic */
-	DAC1->DHR12R1 = sine_table[idx];
-	if (++idx >= 80)
-	{
-		idx = 0;
-	}
+	/* ADC runs continuously; just read the latest conversion result */
+	uint32_t sample = ADC1->DR;
+
+	/* Pass-through to DAC (IIR filter added in next req) */
+	DAC1->DHR12R1 = sample;
 }
 
 /* USER CODE END 1 */

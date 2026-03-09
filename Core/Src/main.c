@@ -196,8 +196,8 @@ static void ADC1_Init(void)
 	{
 	}
 
-	/* Software trigger, 12-bit resolution, right-aligned */
-	ADC1->CFGR = 0;
+	/* Continuous conversion, 12-bit resolution, right-aligned */
+	ADC1->CFGR = ADC_CFGR_CONT;
 
 	/* CH1 sampling time: 47.5 ADC clk cycles (SMP=4) */
 	ADC1->SMPR1 = (4UL << ADC_SMPR1_SMP1_Pos);
@@ -211,6 +211,9 @@ static void ADC1_Init(void)
 	while (!(ADC1->ISR & ADC_ISR_ADRDY))
 	{
 	}
+
+	/* Start continuous conversions — ISR just reads DR each sample tick */
+	ADC1->CR |= ADC_CR_ADSTART;
 }
 
 static void DAC1_Init(void)
