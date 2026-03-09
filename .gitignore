@@ -1,0 +1,11 @@
+Debug/*
+Release/*
+Tests/build/
+Core/Inc/gitcommit.h
+*.lck
+*.zip
+fp-info-cache
+*auto_saved_files*
+_autosave*
+temp/
+temp/*
