@@ -174,9 +174,9 @@ static void MX_GPIO_Init(void)
 
 static void ADC1_Init(void)
 {
-	/* ADC clock: synchronous HCLK/4 = 42 MHz (within 60 MHz max) */
+	/* ADC clock: synchronous HCLK/4 = 42 MHz (CKMODE=3, within 42.5 MHz max) */
 	RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
-	ADC12_COMMON->CCR = (2UL << ADC_CCR_CKMODE_Pos);
+	ADC12_COMMON->CCR = (3UL << ADC_CCR_CKMODE_Pos);
 
 	/* PA0 → analogue mode (no pull, no digital buffer) */
 	GPIOA->MODER |= (3UL << GPIO_MODER_MODE0_Pos);
