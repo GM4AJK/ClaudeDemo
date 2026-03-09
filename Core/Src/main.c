@@ -49,7 +49,7 @@
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void filter_periph_init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -87,57 +87,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
-
-  /* --- Enable peripheral clocks --- */
-  RCC->AHB2ENR  |= RCC_AHB2ENR_ADC12EN | RCC_AHB2ENR_DAC1EN;
-  RCC->APB1ENR1 |= RCC_APB1ENR1_TIM6EN;
-
-  /* --- PA0 (ADC1 IN1) and PA4 (DAC1 OUT1): analogue mode --- */
-  GPIOA->MODER |= (3U << (0U * 2U)) | (3U << (4U * 2U));
-
-  /* --- ADC12 common clock: synchronous HCLK/4 = 42 MHz --- */
-  ADC12_COMMON->CCR = (3U << ADC_CCR_CKMODE_Pos);
-
-  /* --- ADC1 voltage regulator enable (requires >20 µs settle time) --- */
-  ADC1->CR &= ~ADC_CR_DEEPPWD;
-  ADC1->CR |= ADC_CR_ADVREGEN;
-  for (volatile uint32_t i = 0U; i < 4000U; i++)
-  {
-    __NOP();
-  }
-
-  /* --- ADC1 single-ended calibration --- */
-  ADC1->CR &= ~ADC_CR_ADCALDIF;
-  ADC1->CR |= ADC_CR_ADCAL;
-  while (ADC1->CR & ADC_CR_ADCAL)
-  {
-  }
-
-  /* --- ADC1 configuration: 12-bit, right-aligned, single conversion --- */
-  ADC1->CFGR  = 0U;
-  ADC1->SQR1  = (1U << ADC_SQR1_SQ1_Pos);   /* sequence: channel 1 only */
-  ADC1->SMPR1 = (3U << ADC_SMPR1_SMP1_Pos); /* channel 1 sample time: 47.5 cycles */
-
-  /* --- ADC1 enable --- */
-  ADC1->ISR |= ADC_ISR_ADRDY;
-  ADC1->CR  |= ADC_CR_ADEN;
-  while (!(ADC1->ISR & ADC_ISR_ADRDY))
-  {
-  }
-
-  /* --- DAC1 channel 1: enable, no trigger (software immediate) --- */
-  DAC1->CR = DAC_CR_EN1;
-
-  /* --- TIM6: 8 kHz update interrupt (168 MHz / 21000 = 8000 Hz) --- */
-  TIM6->PSC  = 0U;
-  TIM6->ARR  = 20999U;
-  TIM6->EGR  = TIM_EGR_UG;    /* force register update */
-  TIM6->SR   = 0U;             /* clear pending update flag */
-  TIM6->DIER = TIM_DIER_UIE;  /* enable update interrupt */
-  NVIC_SetPriority(TIM6_DAC_IRQn, 0U);
-  NVIC_EnableIRQ(TIM6_DAC_IRQn);
-  TIM6->CR1  = TIM_CR1_CEN;   /* start counter */
-
+  filter_periph_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -217,6 +167,59 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+static void filter_periph_init(void)
+{
+	/* --- Enable peripheral clocks --- */
+	RCC->AHB2ENR  |= RCC_AHB2ENR_ADC12EN | RCC_AHB2ENR_DAC1EN;
+	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM6EN;
+
+	/* --- PA0 (ADC1 IN1) and PA4 (DAC1 OUT1): analogue mode --- */
+	GPIOA->MODER |= (3U << (0U * 2U)) | (3U << (4U * 2U));
+
+	/* --- ADC12 common clock: synchronous HCLK/4 = 42 MHz --- */
+	ADC12_COMMON->CCR = (3U << ADC_CCR_CKMODE_Pos);
+
+	/* --- ADC1 voltage regulator enable (requires >20 µs settle time) --- */
+	ADC1->CR &= ~ADC_CR_DEEPPWD;
+	ADC1->CR |= ADC_CR_ADVREGEN;
+	for (volatile uint32_t i = 0U; i < 4000U; i++)
+	{
+		__NOP();
+	}
+
+	/* --- ADC1 single-ended calibration --- */
+	ADC1->CR &= ~ADC_CR_ADCALDIF;
+	ADC1->CR |= ADC_CR_ADCAL;
+	while (ADC1->CR & ADC_CR_ADCAL)
+	{
+	}
+
+	/* --- ADC1 configuration: 12-bit, right-aligned, single conversion --- */
+	ADC1->CFGR  = 0U;
+	ADC1->SQR1  = (1U << ADC_SQR1_SQ1_Pos);   /* sequence: channel 1 only */
+	ADC1->SMPR1 = (3U << ADC_SMPR1_SMP1_Pos); /* channel 1 sample time: 47.5 cycles */
+
+	/* --- ADC1 enable --- */
+	ADC1->ISR |= ADC_ISR_ADRDY;
+	ADC1->CR  |= ADC_CR_ADEN;
+	while (!(ADC1->ISR & ADC_ISR_ADRDY))
+	{
+	}
+
+	/* --- DAC1 channel 1: enable, no trigger (software immediate) --- */
+	DAC1->CR = DAC_CR_EN1;
+
+	/* --- TIM6: 8 kHz update interrupt (168 MHz / 21000 = 8000 Hz) --- */
+	TIM6->PSC  = 0U;
+	TIM6->ARR  = 20999U;
+	TIM6->EGR  = TIM_EGR_UG;    /* force register update */
+	TIM6->SR   = 0U;             /* clear pending update flag */
+	TIM6->DIER = TIM_DIER_UIE;  /* enable update interrupt */
+	NVIC_SetPriority(TIM6_DAC_IRQn, 0U);
+	NVIC_EnableIRQ(TIM6_DAC_IRQn);
+	TIM6->CR1  = TIM_CR1_CEN;   /* start counter */
+}
 
 /* USER CODE END 4 */
 
