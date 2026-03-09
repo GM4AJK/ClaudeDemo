@@ -200,4 +200,28 @@ void SysTick_Handler(void)
 
 /* USER CODE BEGIN 1 */
 
+/**
+ * @brief  TIM6 update interrupt — 8 kHz sample tick.
+ *         Reads ADC1 CH1 (PA0), passes the sample straight through to DAC1 CH1 (PA4).
+ */
+void TIM6_DAC_IRQHandler(void)
+{
+	if (TIM6->SR & TIM_SR_UIF)
+	{
+		TIM6->SR = ~TIM_SR_UIF;  /* clear update interrupt flag */
+
+		/* Trigger a single ADC conversion */
+		ADC1->CR |= ADC_CR_ADSTART;
+		while (!(ADC1->ISR & ADC_ISR_EOC))
+		{
+		}
+
+		/* Read result (reading DR clears EOC) */
+		uint16_t sample = (uint16_t)ADC1->DR;
+
+		/* Pass-through: write sample directly to DAC */
+		DAC1->DHR12R1 = sample;
+	}
+}
+
 /* USER CODE END 1 */

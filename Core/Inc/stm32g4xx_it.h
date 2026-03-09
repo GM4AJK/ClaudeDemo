@@ -56,7 +56,7 @@ void DebugMon_Handler(void);
 void PendSV_Handler(void);
 void SysTick_Handler(void);
 /* USER CODE BEGIN EFP */
-
+void TIM6_DAC_IRQHandler(void);
 /* USER CODE END EFP */
 
 #ifdef __cplusplus
