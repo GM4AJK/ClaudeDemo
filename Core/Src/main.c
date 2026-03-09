@@ -199,11 +199,14 @@ static void ADC1_Init(void)
 	/* Continuous conversion, 12-bit, right-aligned, overwrite DR on overrun */
 	ADC1->CFGR = ADC_CFGR_CONT | ADC_CFGR_OVRMOD;
 
-	/* CH1 sampling time: 47.5 ADC clk cycles (SMP=4) */
-	ADC1->SMPR1 = (4UL << ADC_SMPR1_SMP1_Pos);
+	/* Enable internal VREFINT (~1.212 V) for diagnostic */
+	ADC12_COMMON->CCR |= ADC_CCR_VREFEN;
 
-	/* Regular sequence: 1 conversion, channel 1 */
-	ADC1->SQR1 = (1UL << ADC_SQR1_SQ1_Pos);
+	/* CH18 (VREFINT) sampling time: 640.5 cycles (SMP=7, ≥5.5 µs required) */
+	ADC1->SMPR2 = (7UL << ADC_SMPR2_SMP18_Pos);
+
+	/* Regular sequence: 1 conversion, channel 18 (VREFINT) */
+	ADC1->SQR1 = (18UL << ADC_SQR1_SQ1_Pos);
 
 	/* Enable ADC and wait for it to be ready */
 	ADC1->ISR = ADC_ISR_ADRDY;
