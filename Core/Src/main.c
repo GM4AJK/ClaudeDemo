@@ -196,8 +196,8 @@ static void ADC1_Init(void)
 	{
 	}
 
-	/* Continuous conversion, 12-bit resolution, right-aligned */
-	ADC1->CFGR = ADC_CFGR_CONT;
+	/* Continuous conversion, 12-bit, right-aligned, overwrite DR on overrun */
+	ADC1->CFGR = ADC_CFGR_CONT | ADC_CFGR_OVRMOD;
 
 	/* CH1 sampling time: 47.5 ADC clk cycles (SMP=4) */
 	ADC1->SMPR1 = (4UL << ADC_SMPR1_SMP1_Pos);
