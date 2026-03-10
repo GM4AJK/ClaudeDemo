@@ -169,16 +169,13 @@ def main():
     sc.connect(('192.168.0.87', 5025))
     sc.settimeout(5)
 
-    # C1: input — AC coupled, traces centred on screen, no DC offset needed
-    scope_send(sc, 'C1:ATTN 10')
-    scope_send(sc, 'C1:CPL A1M')
-    scope_send(sc, 'C1:VDIV 500mV')
-    scope_send(sc, 'C1:OFST 0V')
-
-    # C2: output — AC coupled, VDIV set per frequency
-    scope_send(sc, 'C2:ATTN 10')
-    scope_send(sc, 'C2:CPL A1M')
-    scope_send(sc, 'C2:OFST 0V')
+    # C1 and C2: AC coupled, fixed 200 mV/div — audience sees C2 amplitude
+    # visibly dropping as frequency rises without any axis rescaling.
+    for ch in ('C1', 'C2'):
+        scope_send(sc, f'{ch}:ATTN 10')
+        scope_send(sc, f'{ch}:CPL A1M')
+        scope_send(sc, f'{ch}:VDIV 200mV')
+        scope_send(sc, f'{ch}:OFST 0V')
 
     N_AVG = 5   # number of PKPK readings to average per frequency point
 
@@ -189,14 +186,10 @@ def main():
     for freq in FREQS:
         fy.set_freq(0, freq)
 
-        tdiv  = choose_tdiv(freq)
-        vdiv2 = choose_vdiv_c2(freq)
-
+        tdiv = choose_tdiv(freq)
         scope_send(sc, f'TDIV {tdiv}')
-        scope_send(sc, f'C2:VDIV {vdiv2}')
 
-        # Wait for the new timebase and VDIV to take effect, then allow
-        # the AC coupling RC and filter transient to settle.
+        # Wait for the new timebase to take effect and the filter to settle.
         time.sleep(max(20.0 / freq, 1.0))
 
         # Take N_AVG readings and average to reduce measurement noise.
@@ -221,7 +214,7 @@ def main():
         freqs_meas.append(freq)
         gains_db.append(gain)
         print(f'  {freq:7.1f} Hz  V_in={v_in*1000:6.1f} mV  V_out={v_out*1000:6.1f} mV  '
-              f'gain={gain:+.1f} dB  (n={len(v_ins)}, tdiv={tdiv}, vdiv2={vdiv2})')
+              f'gain={gain:+.1f} dB  (n={len(v_ins)}, tdiv={tdiv})')
 
     fy.close()
     sc.close()
