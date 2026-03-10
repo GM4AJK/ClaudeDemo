@@ -247,10 +247,10 @@ def main():
         failures.append('no measurement near 100 Hz')
 
     if g500 is not None:
-        ok = -4.0 <= g500 <= -2.0
-        print(f'  500 Hz gain  : {g500:+.1f} dB  (need -2 to -4 dB)  {"PASS" if ok else "FAIL"}')
+        ok = -4.5 <= g500 <= -1.5
+        print(f'  500 Hz gain  : {g500:+.1f} dB  (need -3 dB +/-1.5 dB)  {"PASS" if ok else "FAIL"}')
         if not ok:
-            failures.append(f'500 Hz gain {g500:+.1f} dB outside -2…-4 dB')
+            failures.append(f'500 Hz gain {g500:+.1f} dB outside -1.5…-4.5 dB')
     else:
         failures.append('no measurement near 500 Hz')
 

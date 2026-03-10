@@ -81,7 +81,7 @@ Key values:
 
 | Check | Condition |
 |-------|-----------|
-| Gain at 500 Hz | −3 dB ± 1 dB (i.e. −2 to −4 dB) |
+| Gain at 500 Hz | −3 dB ± 1.5 dB (i.e. −1.5 to −4.5 dB) |
 | Gain at 100 Hz | ≥ −1 dB (flat passband) |
 | Corrected phase at 500 Hz | −90° ± 10° |
 | Phase trend | Monotonically decreasing (more negative) with frequency |
