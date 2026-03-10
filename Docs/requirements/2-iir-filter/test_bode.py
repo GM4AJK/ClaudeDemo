@@ -180,6 +180,8 @@ def main():
     scope_send(sc, 'C2:CPL A1M')
     scope_send(sc, 'C2:OFST 0V')
 
+    N_AVG = 5   # number of PKPK readings to average per frequency point
+
     # --- Sweep ---
     freqs_meas = []
     gains_db   = []
@@ -193,26 +195,33 @@ def main():
         scope_send(sc, f'TDIV {tdiv}')
         scope_send(sc, f'C2:VDIV {vdiv2}')
 
-        # Settle: AC coupling needs ~5 time constants to stabilise at low frequencies.
-        # Scope input RC is typically ~1 Hz, so allow at least 1 s below 10 Hz;
-        # above that, 20 cycles is plenty.
-        time.sleep(max(20.0 / freq, 0.5))
+        # Wait for the new timebase and VDIV to take effect, then allow
+        # the AC coupling RC and filter transient to settle.
+        time.sleep(max(20.0 / freq, 1.0))
 
-        r1 = scope_query(sc, 'C1:PAVA? PKPK')
-        r2 = scope_query(sc, 'C2:PAVA? PKPK')
+        # Take N_AVG readings and average to reduce measurement noise.
+        v_ins, v_outs = [], []
+        for _ in range(N_AVG):
+            r1 = scope_query(sc, 'C1:PAVA? PKPK', delay=0.4)
+            r2 = scope_query(sc, 'C2:PAVA? PKPK', delay=0.4)
+            v1 = parse_pkpk(r1)
+            v2 = parse_pkpk(r2)
+            if v1 is not None and v1 > 1e-6 and v2 is not None and v2 > 0.0:
+                v_ins.append(v1)
+                v_outs.append(v2)
 
-        v_in  = parse_pkpk(r1)
-        v_out = parse_pkpk(r2)
-
-        if v_in is None or v_out is None or v_in < 1e-6 or v_out <= 0.0:
-            print(f'  {freq:7.1f} Hz — measurement invalid (C1={r1!r} C2={r2!r}), skipping')
+        if not v_ins:
+            print(f'  {freq:7.1f} Hz — all {N_AVG} readings invalid, skipping')
             continue
+
+        v_in  = sum(v_ins)  / len(v_ins)
+        v_out = sum(v_outs) / len(v_outs)
 
         gain = 20.0 * math.log10(v_out / v_in)
         freqs_meas.append(freq)
         gains_db.append(gain)
         print(f'  {freq:7.1f} Hz  V_in={v_in*1000:6.1f} mV  V_out={v_out*1000:6.1f} mV  '
-              f'gain={gain:+.1f} dB  (tdiv={tdiv}, vdiv2={vdiv2})')
+              f'gain={gain:+.1f} dB  (n={len(v_ins)}, tdiv={tdiv}, vdiv2={vdiv2})')
 
     fy.close()
     sc.close()
