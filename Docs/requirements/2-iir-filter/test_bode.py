@@ -202,7 +202,7 @@ def main():
         v_in  = parse_pkpk(r1)
         v_out = parse_pkpk(r2)
 
-        if v_in is None or v_out is None or v_in < 1e-6:
+        if v_in is None or v_out is None or v_in < 1e-6 or v_out <= 0.0:
             print(f'  {freq:7.1f} Hz — measurement invalid (C1={r1!r} C2={r2!r}), skipping')
             continue
 
