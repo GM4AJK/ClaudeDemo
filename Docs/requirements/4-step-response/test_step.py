@@ -107,6 +107,9 @@ def main():
 	sc.connect(('192.168.0.87', 5025))
 	sc.settimeout(5)
 
+	# Clear any FFT overlay left by a previous test
+	scope_send(sc, ':FUNC1 OFF')
+
 	# C1 and C2: AC coupled, 200 mV/div
 	for ch in ('C1', 'C2'):
 		scope_send(sc, f'{ch}:ATTN 10')

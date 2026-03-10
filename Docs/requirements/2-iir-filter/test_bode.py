@@ -169,6 +169,9 @@ def main():
     sc.connect(('192.168.0.87', 5025))
     sc.settimeout(5)
 
+    # Clear any FFT overlay left by a previous test
+    scope_send(sc, ':FUNC1 OFF')
+
     # C1 and C2: AC coupled, fixed 200 mV/div — audience sees C2 amplitude
     # visibly dropping as frequency rises without any axis rescaling.
     for ch in ('C1', 'C2'):
