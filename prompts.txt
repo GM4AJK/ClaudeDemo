@@ -1,0 +1,209 @@
+---
+
+**Demonstration prompt**  [give this first to establish context for the whole session]
+
+  Read WORKFLOW.md and follow its steps for every requirement.
+
+  When asking me to run a script or take any hardware action, format the instruction as:
+  > **► Run:** ...
+
+  We are starting a new embedded demo project on an STM32G431KBT6. The goal is to implement
+  a real-time digital IIR low-pass filter with automated hardware-in-the-loop verification.
+
+  Signal path: FY6800 CH1 → ADC input pin → IIR filter running in a timer ISR → DAC output
+  pin → oscilloscope CH2.
+
+  Instruments:
+  - Feeltech FY6800 signal generator — serial control, see FY6800.md
+  - Siglent SDS824X HD oscilloscope — SCPI over TCP, see SDS824X.md
+
+  Scope convention for all tests: C1 and C2 fixed at 200 mV/div, AC coupled — no adaptive
+  rescaling at any point during a test.
+
+  Coding rules:
+  - Bare-metal register writes only — no HAL peripheral APIs (e.g. no HAL_ADC_Start,
+    no HAL_DAC_SetValue)
+  - Tabs, not spaces; always braces on all control flow, body on its own line
+  - All peripheral init code in static functions called from USER CODE BEGIN 2 — nothing
+    written inline
+
+---
+
+**Req 1: Peripheral Pinout**
+
+  Given the STM32G431KBT6 and its available peripherals, select and justify appropriate
+  choices for:
+  - Analogue input pin and ADC peripheral (signal from FY6800)
+  - Analogue output pin and DAC peripheral (signal to scope CH2)
+  - Hardware timer to drive a fixed 8 kHz sample rate
+
+  Justify each choice with reference to the device pinout and peripheral capabilities.
+  Show the timer register values (PSC and ARR) that give exactly 8 kHz from the 168 MHz
+  system clock.
+
+  Write Docs/requirements/1-peripheral-pinout/README.md documenting the choices.
+  Implement bare-metal peripheral init in static functions in main.c.
+
+  Critical hardware notes for the implementation:
+  - DAC1 is on the AHB2 bus — enable it with RCC->AHB2ENR |= RCC_AHB2ENR_DAC1EN.
+    Do NOT use RCC_APB1ENR1_DAC1EN — that register bit does not exist for DAC1 on
+    this device and will cause a compile error.
+  - ADC12 is also on AHB2 — enable with RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN.
+  - ADC12 common clock: set synchronous HCLK/4 mode (ADC12_COMMON->CCR bits
+    CKMODE = 0b11) before enabling the ADC.
+  - ADC enable sequence must be: enable voltage regulator (ADVREGEN bit), wait at
+    least 20 µs, run calibration (ADCAL bit, poll until clear), then set ADEN and
+    poll until ADRDY. Skipping any step will result in the ADC not working.
+  - TIM6's IRQ is shared with the DAC underrun interrupt — the handler must be named
+    TIM6_DAC_IRQHandler.
+  - The DAC output is a staircase at 8 kHz (zero-order hold). An RC reconstruction
+    filter is required between the DAC pin and the oscilloscope to smooth this.
+    Use 4.7 kΩ in series with 10 nF to ground (fc ≈ 3.4 kHz). Note this in the README
+    as a hardware build step the user must complete before testing.
+
+  The timer ISR at this stage: read ADC, write raw value straight to DAC (pass-through,
+  no filtering yet).
+
+  Write Docs/requirements/1-peripheral-pinout/test_passthrough.py that:
+  - Sets FY6800 CH1: 100 Hz sine, 1.0 Vpp, 1.65 V DC offset
+  - Configures scope C1 and C2: AC coupled, 200 mV/div, probe ×10
+  - Reads PKPK on C1 and C2, computes the ratio V_out / V_in
+  - Pass condition: 0.8 ≤ ratio ≤ 1.2
+
+---
+
+**Req 2: IIR Low-Pass Filter**  [standalone — use this OR Req 5, not both]
+
+  Implement a 2nd-order Butterworth IIR low-pass filter with a −3 dB cutoff at 500 Hz,
+  running at the 8 kHz sample rate established in Req 1.
+
+  Implementation constraints:
+  - Direct Form I biquad structure
+  - Fixed-point Q15 arithmetic: coefficients as int32_t scaled by 32768, accumulator
+    as int64_t to prevent overflow
+  - No DSP libraries — pure C arithmetic in the TIM6_DAC_IRQHandler ISR
+  - Input and output centred at mid-scale: subtract 2048 before filtering, add 2048
+    before writing to DAC, saturate to [0, 4095] before the DAC write
+
+  The README must include the coefficient derivation: pre-warped analogue prototype,
+  bilinear transform, and the final Q15-scaled integer values for B0, B1, B2, A1, A2.
+
+  Write Docs/requirements/2-iir-filter/test_bode.py that:
+  - Sweeps FY6800 CH1 from 50 Hz to 2000 Hz (35 log-spaced points), sine wave,
+    1.0 Vpp, 1.65 V DC offset
+  - Both scope channels fixed at 200 mV/div AC coupled — no rescaling at any point
+  - Clears any scope FUNC1 (FFT) at the start of the test with ':FUNC1 OFF'
+  - At each frequency averages 5 PKPK readings on C1 and C2 and computes gain in dB;
+    skip any reading where V_in or V_out is zero or negative (guard before log10)
+  - Saves a Bode magnitude plot with the theoretical 2nd-order Butterworth overlaid
+  - Pass conditions:
+      - Gain at 100 Hz ≥ −1 dB (flat passband)
+      - Gain at 500 Hz: −3 dB ± 1.5 dB (tolerance covers Q15 rounding and
+        frequency-grid spacing — the actual −3 dB crossing may be 40–60 Hz below
+        the nominal cutoff due to coefficient quantization)
+      - Gain at 1000 Hz ≤ −10 dB (roll-off confirmed)
+
+---
+
+**Req 3: THD Measurement**
+
+  Using the SDS824X scope FFT, measure the Total Harmonic Distortion of the IIR filter
+  output at 200 Hz and verify it is below 1%.
+
+  Test configuration:
+  - FY6800 CH1: 200 Hz sine, 1.0 Vpp, 1.65 V DC offset (treat source as ideal, zero THD)
+  - Scope C1: filter input, AC coupled, 200 mV/div — stays visible on screen as reference
+  - Scope C2: filter output, AC coupled, 200 mV/div
+  - Scope FUNC1: FFT on C2, FlatTop window, 0–4000 Hz span (centre 2000 Hz), 2M points,
+    dBVrms units — leave the FFT displayed on screen when the test completes
+
+  The Python script must follow this exact timing sequence to allow the FFT to settle
+  before reading — skipping any wait causes "no peaks" failures:
+  1. Send all channel and timebase setup commands
+  2. Send FUNC1 FFT configuration commands
+  3. Send ':FUNC1 ON'
+  4. Wait 2 seconds (FFT engine starts computing)
+  5. Configure peak search: ':FUNC1:FFT:SEAR PEAK', threshold −80 dBVrms
+  6. Wait 5 seconds (FFT fully settled and peaks stable)
+  7. Query ':FUNC1:FFT:SEAR:RES?' to read peaks
+
+  Harmonic identification:
+  - Use a ±2% frequency tolerance when matching peaks to expected harmonic frequencies
+    (tighter than 5% to avoid false matches from nearby spurious peaks)
+  - For each harmonic 2nd–10th, print: harmonic number, frequency (Hz), amplitude
+    (dBVrms), and level relative to fundamental (dBc)
+  - If a harmonic is below the −80 dBVrms threshold (not in peak list), print
+    "< −80 dBVrms  (below threshold)" — do not skip the line
+  - Compute THD from all detected harmonics
+  - Pass condition: THD < 1%
+
+---
+
+**Req 4: Phase Response**  [standalone — use this OR Req 5, not both]
+
+  Measure the phase delay between the filter input and output across frequency. Sweep the
+  FY6800 from 100 Hz to 800 Hz (20 log-spaced points) and at each frequency use the
+  scope's channel skew measurement (C1-C2:MEAD? SKEW) to find the time delay Δt between
+  C1 and C2, then convert to degrees: phase = −Δt × f × 360.
+
+  Both channels fixed at 200 mV/div AC coupled throughout — no rescaling.
+  Clear any scope FUNC1 (FFT) at the start with ':FUNC1 OFF'.
+
+  The frequency range is bounded by two hardware constraints:
+  - Below 100 Hz: scope AC coupling is not settled — SKEW returns a spurious fixed value
+    (~−122 µs) unrelated to the signal, producing phase readings near −357°
+  - Above 800 Hz: the total phase delay (filter + ~170 µs system delay) exceeds half the
+    signal period — the SKEW measurement wraps and returns a large negative value,
+    producing a non-physical upward jump in phase
+
+  The filter introduces a constant system delay of approximately 170 µs (ADC sample
+  period ~125 µs plus RC reconstruction filter group delay ~47 µs) that adds a linear
+  phase offset to every reading. Estimate this delay by median fit across all measured
+  points and subtract it before the pass/fail checks and before plotting the corrected
+  curve. The raw measured curve and the theoretical curve (shifted by the same system
+  delay) should both appear on the plot so the overlay is meaningful.
+
+  Pass conditions:
+  - Corrected phase at 500 Hz: −90° ± 10°
+  - Phase trend: monotonically decreasing (more negative) with frequency
+
+---
+
+**Req 5: Combined Bode Plot**  [replaces Reqs 2 + 4 — use this instead of both]
+
+  Produce a standard two-panel Bode plot for the IIR filter: magnitude (dB) on the top
+  panel and phase (degrees) on the bottom, both versus frequency on a log scale. A single
+  frequency sweep collects both measurements simultaneously at each point.
+
+  Sweep the FY6800 from 100 Hz to 800 Hz with 20 log-spaced points. At each frequency,
+  average 5 readings each of:
+  - C1 and C2 PKPK → gain in dB (skip any reading where V_in or V_out is zero or
+    negative — guard before log10)
+  - C1-C2 SKEW → phase in degrees (phase = −Δt × f × 360, wrapped to (−360°, 0°])
+
+  Both scope channels fixed at 200 mV/div AC coupled throughout, no rescaling.
+  Clear any scope FUNC1 (FFT) at the start with ':FUNC1 OFF'.
+
+  The frequency range is bounded by two hardware constraints:
+  - Below 100 Hz: scope AC coupling is not settled — SKEW returns a spurious fixed value
+    (~−122 µs), producing phase readings near −357°
+  - Above 800 Hz: the total phase delay (filter + ~170 µs system delay) exceeds half the
+    signal period — the SKEW measurement wraps and produces a non-physical upward phase
+    jump, triggering a false monotone failure
+
+  Overlay the theoretical 2nd-order Butterworth curves on both panels. For the phase
+  panel, subtract the estimated system delay (~170 µs, ADC sample period plus RC
+  reconstruction filter group delay) from the raw measurements before pass/fail checks.
+  Estimate the system delay by median fit across all measured points. Plot both the raw
+  measured phase and the theoretical curve shifted by the same system delay, so the
+  overlay is visually meaningful.
+
+  Pass conditions:
+  - Gain at 100 Hz: ≥ −1 dB (flat passband)
+  - Gain at 500 Hz: −3 dB ± 1.5 dB (tolerance accounts for frequency-grid spacing and
+    Q15 coefficient quantization — the actual −3 dB crossing may sit 40–60 Hz below the
+    nominal cutoff)
+  - Corrected phase at 500 Hz: −90° ± 10°
+  - Phase trend: monotonically decreasing with frequency
+
+---
