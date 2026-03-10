@@ -144,13 +144,15 @@ def main():
 	scope_send(sc, ':FUNC1:FFT:MODE NORM')
 	scope_send(sc, ':FUNC1 ON')
 
-	# Peak search — threshold well below expected 1% harmonic level
-	# 1% of fundamental (-9 dBVrms) = -49 dBVrms; use -60 dBVrms for margin
-	scope_send(sc, ':FUNC1:FFT:SEAR PEAK')
-	scope_send(sc, ':FUNC1:FFT:SEAR:THR -60.0')
+	# Allow the FFT to start computing before configuring peak search
+	time.sleep(2.0)
 
-	print('  FFT configured — settling 3 s ...')
-	time.sleep(3.0)
+	# Peak search — use -80 dBVrms threshold (recommended for this scope)
+	scope_send(sc, ':FUNC1:FFT:SEAR PEAK')
+	scope_send(sc, ':FUNC1:FFT:SEAR:THR -80.0')
+
+	print('  FFT configured — settling 5 s ...')
+	time.sleep(5.0)
 
 	# --- Read peaks ---
 	raw = scope_query(sc, ':FUNC1:FFT:SEAR:RES?', delay=2.0)
