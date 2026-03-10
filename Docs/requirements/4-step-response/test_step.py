@@ -114,53 +114,62 @@ def main():
 		scope_send(sc, f'{ch}:VDIV 200mV')
 		scope_send(sc, f'{ch}:OFST 0V')
 
-	# 1 ms/div: shows the step transition and ~5 ms of settling
-	scope_send(sc, 'TDIV 1ms')
-
-	# Trigger on C1 rising edge so the step is centred on screen
+	# Trigger on C1 rising edge
 	scope_send(sc, 'TRIG_MODE AUTO')
 	scope_send(sc, 'C1:TRIG_SLOPE POS')
 	scope_send(sc, 'TRIG_SELECT EDGE,SR,C1')
 
+	# Use 5 ms/div (50 ms window = 2.5 cycles) for measurements — AMPL and
+	# PKPK need multiple complete cycles to be statistically accurate.
+	scope_send(sc, 'TDIV 5ms')
 	print('  Settling 2 s ...')
 	time.sleep(2.0)
 
-	# --- Measure ---
+	# --- Measure at wide timebase ---
+	r_pkpk_c1 = scope_query(sc, 'C1:PAVA? PKPK')
 	r_ampl_c1 = scope_query(sc, 'C1:PAVA? AMPL')
+	r_pkpk_c2 = scope_query(sc, 'C2:PAVA? PKPK')
 	r_ampl_c2 = scope_query(sc, 'C2:PAVA? AMPL')
-	r_max_c2  = scope_query(sc, 'C2:PAVA? MAX')
+
+	# Switch to 1 ms/div so the step response is visible on screen
+	scope_send(sc, 'TDIV 1ms')
 	sc.close()
 
+	print(f'  C1 PKPK  : {r_pkpk_c1}')
 	print(f'  C1 AMPL  : {r_ampl_c1}')
+	print(f'  C2 PKPK  : {r_pkpk_c2}')
 	print(f'  C2 AMPL  : {r_ampl_c2}')
-	print(f'  C2 MAX   : {r_max_c2}')
 
+	pkpk_c1 = parse_pava(r_pkpk_c1)
 	ampl_c1 = parse_pava(r_ampl_c1)
+	pkpk_c2 = parse_pava(r_pkpk_c2)
 	ampl_c2 = parse_pava(r_ampl_c2)
-	max_c2  = parse_pava(r_max_c2)
 
-	if any(v is None for v in (ampl_c1, ampl_c2, max_c2)):
+	if any(v is None for v in (pkpk_c1, ampl_c1, pkpk_c2, ampl_c2)):
 		print('FAIL: could not parse scope measurements')
 		sys.exit(1)
 
-	if ampl_c1 < 1e-6 or ampl_c2 < 1e-6:
+	if pkpk_c1 < 1e-6 or ampl_c2 < 1e-6:
 		print('FAIL: amplitude too small to measure')
 		sys.exit(1)
 
-	overshoot = (max_c2 - ampl_c2 / 2.0) / ampl_c2 * 100.0
+	# Overshoot: C2 PKPK includes the overshoot peaks on both edges.
+	# overshoot % = (C2_pkpk / C1_pkpk - 1) * 100
+	overshoot = (pkpk_c2 / pkpk_c1 - 1.0) * 100.0
 	dc_gain   = ampl_c2 / ampl_c1
 
-	print(f'\n  C1 amplitude : {ampl_c1*1000:.1f} mV')
-	print(f'  C2 amplitude : {ampl_c2*1000:.1f} mV')
-	print(f'  C2 peak (MAX): {max_c2*1000:.1f} mV')
+	print(f'\n  C1 pk-pk     : {pkpk_c1*1000:.1f} mV')
+	print(f'  C2 pk-pk     : {pkpk_c2*1000:.1f} mV')
 	print(f'  Overshoot    : {overshoot:.2f} %  (theoretical ~4.3 %)')
+	print(f'  C1 amplitude : {ampl_c1*1000:.1f} mV')
+	print(f'  C2 amplitude : {ampl_c2*1000:.1f} mV')
 	print(f'  DC gain      : {dc_gain:.4f}')
 
 	failures = []
 	ok_over = 1.0 <= overshoot <= 8.0
-	ok_gain = 0.9 <= dc_gain   <= 1.1
-	print(f'\n  Overshoot {overshoot:.2f} % in [1, 8] %  : {"PASS" if ok_over else "FAIL"}')
-	print(f'  DC gain   {dc_gain:.4f}  in [0.9, 1.1]: {"PASS" if ok_gain else "FAIL"}')
+	ok_gain = 0.9 <= dc_gain  <= 1.1
+	print(f'\n  Overshoot {overshoot:.2f} % in [1, 8] %   : {"PASS" if ok_over else "FAIL"}')
+	print(f'  DC gain   {dc_gain:.4f}  in [0.9, 1.1] : {"PASS" if ok_gain else "FAIL"}')
 
 	if not ok_over: failures.append(f'overshoot {overshoot:.2f} % outside [1, 8] %')
 	if not ok_gain: failures.append(f'DC gain {dc_gain:.4f} outside [0.9, 1.1]')
