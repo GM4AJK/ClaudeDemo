@@ -32,6 +32,18 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+/* Biquad IIR coefficients — 2nd-order Butterworth LPF, fc=500 Hz, fs=8 kHz
+ * Derived via bilinear transform: K = tan(pi*500/8000) = 0.198912
+ * Stored as Q15 integers (value * 2^15); accumulator is int64_t.
+ * Sign convention: y[n] = (B0*x[n] + B1*x[n-1] + B2*x[n-2]
+ *                        - A1*y[n-1] - A2*y[n-2]) >> 15
+ */
+#define BQ_B0	  982		/* b0 = b2 =  0.029954 */
+#define BQ_B1	 1963		/* b1       =  0.059908 */
+#define BQ_B2	  982
+#define BQ_A1	(-47653)	/* a1       = -1.45424  */
+#define BQ_A2	 18811		/* a2       =  0.57404  */
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -41,6 +53,12 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
+
+/* Biquad delay-line state (centred values, DC offset removed) */
+static int32_t bq_x1 = 0;
+static int32_t bq_x2 = 0;
+static int32_t bq_y1 = 0;
+static int32_t bq_y2 = 0;
 
 /* USER CODE END PV */
 
@@ -202,7 +220,7 @@ void SysTick_Handler(void)
 
 /**
  * @brief  TIM6 update interrupt — 8 kHz sample tick.
- *         Reads ADC1 CH1 (PA0), passes the sample straight through to DAC1 CH1 (PA4).
+ *         ADC1 CH1 (PA0) → 2nd-order Butterworth IIR LPF (fc=500 Hz) → DAC1 CH1 (PA4).
  */
 void TIM6_DAC_IRQHandler(void)
 {
@@ -210,17 +228,34 @@ void TIM6_DAC_IRQHandler(void)
 	{
 		TIM6->SR = ~TIM_SR_UIF;  /* clear update interrupt flag */
 
-		/* Trigger a single ADC conversion */
+		/* Trigger a single ADC conversion and wait for result */
 		ADC1->CR |= ADC_CR_ADSTART;
 		while (!(ADC1->ISR & ADC_ISR_EOC))
 		{
 		}
 
-		/* Read result (reading DR clears EOC) */
-		uint16_t sample = (uint16_t)ADC1->DR;
+		/* Centre input: remove 12-bit mid-scale DC offset */
+		int32_t x0 = (int32_t)(uint16_t)ADC1->DR - 2048;
 
-		/* Pass-through: write sample directly to DAC */
-		DAC1->DHR12R1 = sample;
+		/* Direct Form I biquad — Q15 coefficients, int64 accumulator */
+		int64_t acc = (int64_t)BQ_B0 * x0
+		            + (int64_t)BQ_B1 * bq_x1
+		            + (int64_t)BQ_B2 * bq_x2
+		            - (int64_t)BQ_A1 * bq_y1
+		            - (int64_t)BQ_A2 * bq_y2;
+
+		int32_t y0 = (int32_t)(acc >> 15);
+
+		/* Saturate to ±2048 to guard against transient overflow */
+		if (y0 >  2047) { y0 =  2047; }
+		if (y0 < -2048) { y0 = -2048; }
+
+		/* Advance delay lines */
+		bq_x2 = bq_x1;  bq_x1 = x0;
+		bq_y2 = bq_y1;  bq_y1 = y0;
+
+		/* Restore DC offset and write to DAC */
+		DAC1->DHR12R1 = (uint32_t)(y0 + 2048);
 	}
 }
 
