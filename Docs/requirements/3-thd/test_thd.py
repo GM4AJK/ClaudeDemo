@@ -181,6 +181,8 @@ def main():
 
 	# --- Identify harmonics 2–N ---
 	harmonic_v2 = []
+	THRESHOLD_DB = -80.0   # must match :FUNC1:FFT:SEAR:THR value above
+
 	for h in range(2, N_HARMONICS + 1):
 		expected = FUND_FREQ * h
 		candidates = [(f, a) for f, a in peaks
@@ -192,7 +194,8 @@ def main():
 			print(f'  Harmonic {h:2d}: {hf:7.1f} Hz  {ha:+.2f} dBVrms  '
 			      f'({ha - fund_db:+.1f} dBc)')
 		else:
-			print(f'  Harmonic {h:2d}: {expected:7.1f} Hz  — below threshold')
+			print(f'  Harmonic {h:2d}: {expected:7.1f} Hz  '
+			      f'< {THRESHOLD_DB:.0f} dBVrms  (below threshold)')
 
 	# --- Compute THD ---
 	fund_v_rms = 10.0 ** (fund_db / 20.0)
