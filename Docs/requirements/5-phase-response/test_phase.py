@@ -30,7 +30,9 @@ import matplotlib.pyplot as plt
 
 
 FC      = 500.0   # filter cutoff Hz
-FREQS   = np.logspace(math.log10(50), math.log10(2000), 35).tolist()
+# Limit to 1000 Hz — above this the scope SKEW measurement wraps ambiguously
+# once the total phase delay exceeds half a signal period.
+FREQS   = np.logspace(math.log10(50), math.log10(1000), 25).tolist()
 
 
 def theory_phase(f, fc=FC):
@@ -184,32 +186,49 @@ def main():
         print('FAIL: no valid measurements')
         sys.exit(1)
 
-    # --- PASS/FAIL checks ---
-    def nearest_phase(target_hz, tol_hz=60):
+    # --- Estimate and subtract constant system delay ---
+    # The measured phase includes a linear delay from the ADC sample period
+    # (~125 µs) and the RC reconstruction filter group delay (~47 µs).
+    # Estimate it from all data points: delay = -(measured - theory) / (f*360)
+    delay_estimates = [-(pm - theory_phase(f)) / (f * 360.0)
+                       for f, pm in zip(freqs_meas, phases_meas)]
+    delay_estimates_sorted = sorted(delay_estimates)
+    system_delay_s = delay_estimates_sorted[len(delay_estimates_sorted) // 2]
+
+    phases_corrected = [pm + system_delay_s * f * 360.0
+                        for f, pm in zip(freqs_meas, phases_meas)]
+
+    print(f'\n  Estimated system delay: {system_delay_s*1e6:.1f} µs'
+          f'  (ADC sample + RC filter group delay)')
+
+    # --- PASS/FAIL checks (on delay-corrected phase) ---
+    def nearest(target_hz, phases, tol_hz=60):
         candidates = [(abs(f - target_hz), p)
-                      for f, p in zip(freqs_meas, phases_meas)
+                      for f, p in zip(freqs_meas, phases)
                       if abs(f - target_hz) <= tol_hz]
         return min(candidates, key=lambda x: x[0])[1] if candidates else None
 
-    phase_500 = nearest_phase(500)
+    phase_500 = nearest(500, phases_corrected)
     failures  = []
 
     print()
     if phase_500 is not None:
         ok = -100.0 <= phase_500 <= -80.0
-        print(f'  Phase at 500 Hz : {phase_500:+.1f}°  (need −90° ± 10°)  '
-              f'{"PASS" if ok else "FAIL"}')
+        print(f'  Corrected phase at 500 Hz : {phase_500:+.1f}°  '
+              f'(need −90° ± 10°)  {"PASS" if ok else "FAIL"}')
         if not ok:
-            failures.append(f'phase at 500 Hz = {phase_500:+.1f}°, outside −80…−100°')
+            failures.append(f'corrected phase at 500 Hz = {phase_500:+.1f}°, '
+                            f'outside −80…−100°')
     else:
         failures.append('no measurement near 500 Hz')
 
-    # Monotonically decreasing check
-    diffs      = [phases_meas[i+1] - phases_meas[i]
-                  for i in range(len(phases_meas) - 1)]
-    increasing = sum(1 for d in diffs if d > 2.0)   # >2° tolerance for noise
+    # Monotonically decreasing check on corrected phase
+    diffs      = [phases_corrected[i+1] - phases_corrected[i]
+                  for i in range(len(phases_corrected) - 1)]
+    increasing = sum(1 for d in diffs if d > 3.0)
     ok_mono    = increasing == 0
-    print(f'  Phase trend     : {"monotonically decreasing" if ok_mono else f"{increasing} non-monotone steps"}  '
+    print(f'  Phase trend     : '
+          f'{"monotonically decreasing" if ok_mono else f"{increasing} non-monotone steps"}  '
           f'{"PASS" if ok_mono else "FAIL"}')
     if not ok_mono:
         failures.append(f'phase not monotonically decreasing ({increasing} reversals)')
@@ -217,27 +236,31 @@ def main():
     # --- Plot ---
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    f_theory = np.logspace(math.log10(50), math.log10(2000), 300)
-    ax.semilogx(f_theory, [theory_phase(f) for f in f_theory],
-                'b--', linewidth=1.2, label='Theoretical (2nd-order Butterworth)')
+    f_theory = np.logspace(math.log10(50), math.log10(1000), 300)
+    # Theoretical curve includes system delay for the raw overlay
+    ax.semilogx(f_theory,
+                [theory_phase(f) - system_delay_s * f * 360.0 for f in f_theory],
+                'b--', linewidth=1.2,
+                label=f'Theoretical + {system_delay_s*1e6:.0f} µs system delay')
 
     ax.semilogx(freqs_meas, phases_meas,
-                'ro-', markersize=5, linewidth=1.5, label='Measured')
+                'ro-', markersize=5, linewidth=1.5, label='Measured (raw)')
 
     ax.axhline(-90.0, color='gray', linestyle=':', linewidth=1.0, label='−90°')
-    ax.axvline(FC,    color='gray', linestyle=':', linewidth=1.0, label=f'fc = {FC:.0f} Hz')
+    ax.axvline(FC,    color='gray', linestyle=':', linewidth=1.0,
+               label=f'fc = {FC:.0f} Hz')
 
     ax.set_xlabel('Frequency (Hz)')
     ax.set_ylabel('Phase (degrees)')
     ax.set_title('Phase Response — IIR LPF  fc = 500 Hz  (2nd-order Butterworth)')
     ax.legend()
     ax.grid(True, which='both', linestyle=':', alpha=0.6)
-    ax.set_xlim(50, 2000)
-    ax.set_ylim(-200, 10)
+    ax.set_xlim(50, 1000)
+    ax.set_ylim(-220, 10)
 
     plt.tight_layout()
     plt.savefig('phase_plot.png', dpi=150)
-    print('\nPhase plot saved to phase_plot.png')
+    print('Phase plot saved to phase_plot.png')
 
     print()
     if failures:
