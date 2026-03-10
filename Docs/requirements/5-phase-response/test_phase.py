@@ -30,9 +30,11 @@ import matplotlib.pyplot as plt
 
 
 FC      = 500.0   # filter cutoff Hz
-# Limit to 1000 Hz — above this the scope SKEW measurement wraps ambiguously
-# once the total phase delay exceeds half a signal period.
-FREQS   = np.logspace(math.log10(50), math.log10(1000), 25).tolist()
+# Start at 100 Hz — below this AC coupling is not settled and the scope SKEW
+# measurement returns a bogus -122 µs (period artifact).
+# Limit to 1000 Hz — above this the SKEW wraps ambiguously once the total
+# phase delay exceeds half a signal period.
+FREQS   = np.logspace(math.log10(100), math.log10(1000), 20).tolist()
 
 
 def theory_phase(f, fc=FC):
@@ -236,7 +238,7 @@ def main():
     # --- Plot ---
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    f_theory = np.logspace(math.log10(50), math.log10(1000), 300)
+    f_theory = np.logspace(math.log10(100), math.log10(1000), 300)
     # Theoretical curve includes system delay for the raw overlay
     ax.semilogx(f_theory,
                 [theory_phase(f) - system_delay_s * f * 360.0 for f in f_theory],
@@ -255,7 +257,7 @@ def main():
     ax.set_title('Phase Response — IIR LPF  fc = 500 Hz  (2nd-order Butterworth)')
     ax.legend()
     ax.grid(True, which='both', linestyle=':', alpha=0.6)
-    ax.set_xlim(50, 1000)
+    ax.set_xlim(100, 1000)
     ax.set_ylim(-220, 10)
 
     plt.tight_layout()
