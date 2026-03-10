@@ -160,7 +160,7 @@ def main():
     fy = FY6800('/dev/ttyUSB0')
     fy.set_wave(0, 0)       # sine
     fy.set_amp(0, 1.0)      # 1.0 Vpp
-    fy.set_offset(0, 1.65)  # 1.65 V DC offset
+    fy.set_offset(0, 1.65)  # 1.65 V DC offset (keeps MCU ADC/DAC in mid-range)
     fy.output(0, True)
 
     # --- Scope initial setup ---
@@ -169,16 +169,16 @@ def main():
     sc.connect(('192.168.0.87', 5025))
     sc.settimeout(5)
 
-    # C1: input — fixed 500 mV/div
+    # C1: input — AC coupled, traces centred on screen, no DC offset needed
     scope_send(sc, 'C1:ATTN 10')
-    scope_send(sc, 'C1:CPL D1M')
+    scope_send(sc, 'C1:CPL A1M')
     scope_send(sc, 'C1:VDIV 500mV')
-    scope_send(sc, 'C1:OFST -1.65V')
+    scope_send(sc, 'C1:OFST 0V')
 
-    # C2: output — VDIV set per frequency
+    # C2: output — AC coupled, VDIV set per frequency
     scope_send(sc, 'C2:ATTN 10')
-    scope_send(sc, 'C2:CPL D1M')
-    scope_send(sc, 'C2:OFST -1.65V')
+    scope_send(sc, 'C2:CPL A1M')
+    scope_send(sc, 'C2:OFST 0V')
 
     # --- Sweep ---
     freqs_meas = []
@@ -193,8 +193,10 @@ def main():
         scope_send(sc, f'TDIV {tdiv}')
         scope_send(sc, f'C2:VDIV {vdiv2}')
 
-        # Settle: allow 10 cycles minimum, 150 ms minimum
-        time.sleep(max(10.0 / freq, 0.15))
+        # Settle: AC coupling needs ~5 time constants to stabilise at low frequencies.
+        # Scope input RC is typically ~1 Hz, so allow at least 1 s below 10 Hz;
+        # above that, 20 cycles is plenty.
+        time.sleep(max(20.0 / freq, 0.5))
 
         r1 = scope_query(sc, 'C1:PAVA? PKPK')
         r2 = scope_query(sc, 'C2:PAVA? PKPK')
