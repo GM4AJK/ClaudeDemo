@@ -49,7 +49,10 @@
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 /* USER CODE BEGIN PFP */
-
+static void filter_periph_init(void);
+static void adc_init(void);
+static void dac_init(void);
+static void tim6_init(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -87,7 +90,7 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
-
+  filter_periph_init();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -167,6 +170,113 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+
+/*
+ * filter_periph_init — top-level peripheral initialisation for the filter signal path.
+ * Called once from main() after SystemClock_Config and MX_GPIO_Init.
+ */
+static void filter_periph_init(void)
+{
+	adc_init();
+	dac_init();
+	tim6_init();
+}
+
+/*
+ * adc_init — configure ADC1 channel 1 (PA0) for software-triggered single conversion.
+ *
+ * Clock: synchronous HCLK/4 (42 MHz) via ADC12_COMMON CCR CKMODE=0b11.
+ * Resolution: 12-bit.  Sampling time: 6.5 ADC cycles → total conversion 19 cycles = 452 ns.
+ * Enable sequence per RM0440 §21.4.6: ADVREGEN → wait 20 µs → ADCAL → ADEN → ADRDY.
+ */
+static void adc_init(void)
+{
+	/* Enable ADC12 clock on AHB2 */
+	RCC->AHB2ENR |= RCC_AHB2ENR_ADC12EN;
+
+	/* PA0 to analogue mode (MODER bits 1:0 = 0b11) */
+	GPIOA->MODER |= (3U << (0 * 2));
+
+	/* ADC12 common clock: synchronous HCLK/4 (CKMODE = 0b11) */
+	ADC12_COMMON->CCR = (3U << ADC_CCR_CKMODE_Pos);
+
+	/* Exit deep power-down, enable voltage regulator */
+	ADC1->CR &= ~ADC_CR_DEEPPWD;
+	ADC1->CR |= ADC_CR_ADVREGEN;
+
+	/* Wait ≥20 µs for regulator start-up (1 ms via HAL tick) */
+	HAL_Delay(1);
+
+	/* Calibrate (single-ended: ADCALDIF = 0) */
+	ADC1->CR |= ADC_CR_ADCAL;
+	while (ADC1->CR & ADC_CR_ADCAL)
+	{
+	}
+
+	/* Enable ADC */
+	ADC1->CR |= ADC_CR_ADEN;
+	while (!(ADC1->ISR & ADC_ISR_ADRDY))
+	{
+	}
+
+	/* Configure: 12-bit, software trigger, single conversion */
+	ADC1->CFGR = 0;	/* CONT=0, EXTEN=00, RES=00 (12-bit) */
+
+	/* Sequence: 1 conversion, channel 1 (PA0 = IN1) */
+	ADC1->SQR1 = (1U << ADC_SQR1_SQ1_Pos);
+
+	/* Sampling time for channel 1: 6.5 ADC cycles (SMP1 = 0b001) */
+	ADC1->SMPR1 = (1U << ADC_SMPR1_SMP1_Pos);
+}
+
+/*
+ * dac_init — configure DAC1 channel 1 (PA4) in software-trigger mode.
+ *
+ * DAC1 is on AHB2.  Output is written directly to DHR12R1 by the ISR.
+ * PA4 MODER set to analogue to connect pin to DAC output buffer.
+ */
+static void dac_init(void)
+{
+	/* Enable DAC1 clock on AHB2 */
+	RCC->AHB2ENR |= RCC_AHB2ENR_DAC1EN;
+
+	/* PA4 to analogue mode (MODER bits 9:8 = 0b11) */
+	GPIOA->MODER |= (3U << (4 * 2));
+
+	/* Enable DAC1 channel 1 (no hardware trigger, output buffer enabled) */
+	DAC1->CR = DAC_CR_EN1;
+}
+
+/*
+ * tim6_init — configure TIM6 to fire an update interrupt at exactly 8 kHz.
+ *
+ * f = PCLK1 / ((PSC+1) * (ARR+1)) = 168 000 000 / (1 * 21 000) = 8 000 Hz.
+ * IRQ is shared with DAC underrun; handler name: TIM6_DAC_IRQHandler.
+ */
+static void tim6_init(void)
+{
+	/* Enable TIM6 clock on APB1 */
+	RCC->APB1ENR1 |= RCC_APB1ENR1_TIM6EN;
+
+	/* PSC=0, ARR=20999 → 168 MHz / 21000 = 8000 Hz */
+	TIM6->PSC = 0;
+	TIM6->ARR = 20999;
+
+	/* Generate an update event to load PSC and ARR into shadow registers */
+	TIM6->EGR = TIM_EGR_UG;
+
+	/* Clear the update flag set by the UG event above */
+	TIM6->SR = 0;
+
+	/* Enable update interrupt */
+	TIM6->DIER = TIM_DIER_UIE;
+
+	/* Enable TIM6_DAC IRQ in NVIC at default priority */
+	NVIC_EnableIRQ(TIM6_DAC_IRQn);
+
+	/* Start counter */
+	TIM6->CR1 = TIM_CR1_CEN;
+}
 
 /* USER CODE END 4 */
 

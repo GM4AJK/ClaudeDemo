@@ -200,4 +200,28 @@ void SysTick_Handler(void)
 
 /* USER CODE BEGIN 1 */
 
+/*
+ * TIM6_DAC_IRQHandler — 8 kHz sample ISR.
+ *
+ * Reads one 12-bit sample from ADC1 and writes it straight to DAC1 CH1
+ * (pass-through, no filtering).  The shared TIM6/DAC IRQ name is required
+ * by the STM32G4 vector table.
+ */
+void TIM6_DAC_IRQHandler(void)
+{
+	/* Clear TIM6 update interrupt flag */
+	TIM6->SR &= ~TIM_SR_UIF;
+
+	/* Start single software-triggered ADC conversion */
+	ADC1->CR |= ADC_CR_ADSTART;
+
+	/* Wait for end of conversion */
+	while (!(ADC1->ISR & ADC_ISR_EOC))
+	{
+	}
+
+	/* Read result (clears EOC flag) and pass straight to DAC */
+	DAC1->DHR12R1 = ADC1->DR;
+}
+
 /* USER CODE END 1 */
