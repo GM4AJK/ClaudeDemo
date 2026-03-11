@@ -12,9 +12,23 @@ Real-time digital IIR filter demo on STM32G431KB6 with automated Bode plot verif
 
 ## Build
 
-Builds are done exclusively in **STM32CubeIDE** (GUI). There is no Makefile or CLI build. Build output: `Debug/ClaudeDemo.elf`.
+Claude builds and flashes autonomously from WSL2 using `powershell.exe` to invoke the Windows toolchain. Build output: `Debug/ClaudeDemo.elf`.
 
-Claude never builds, flashes, commits, or pushes. The user does all of these (commits are GPG-signed).
+Note: the toolchain PATH must be set inside the `powershell.exe -Command` call — it is not inherited from WSL2.
+
+### Build
+```bash
+powershell.exe -Command "
+\$env:PATH += ';C:\ST\STM32CubeIDE_1.12.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin;C:\ST\STM32CubeIDE_1.12.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.400.202601091506\tools\bin';
+& 'C:\ST\STM32CubeIDE_1.12.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.make.win32_2.2.100.202601091506\tools\bin\make.exe' -C 'C:\Users\kirkh\STM32CubeIDE\workspace_1.18.x\ClaudeDemo\Debug' all 2>&1"
+```
+
+### Flash
+```bash
+powershell.exe -Command "
+\$env:PATH += ';C:\ST\STM32CubeIDE_1.12.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.400.202601091506\tools\bin';
+STM32_Programmer_CLI.exe -c port=SWD -w 'C:\Users\kirkh\STM32CubeIDE\workspace_1.18.x\ClaudeDemo\Debug\ClaudeDemo.elf' -rst 2>&1"
+```
 
 ## Architecture
 
@@ -55,14 +69,15 @@ See `FY6800.md` and `SDS824X.md` for protocol details.
 
 ## Development Workflow
 
-Per DEMO.md:
+Per WORKFLOW.md:
 1. Write requirements doc `Docs/requirements/<N>-<slug>/README.md`
-2. `git add` the doc — user commits (GPG-signed)
+2. Commit and push the doc
 3. Create GitHub issue referencing the doc
 4. Create feature branch
-5. Implement on branch; write Python verification script at `Docs/requirements/<N>-<slug>/<script>.py`
-6. User builds in STM32CubeIDE and tests on hardware; run verification script
-7. User commits, opens PR, merges
+5. Implement firmware; write Python verification script at `Docs/requirements/<N>-<slug>/<script>.py`
+6. Build and flash via CLI (see Build section above)
+7. Run verification script
+8. Commit, push, open PR, merge
 
 ## Hardware
 
