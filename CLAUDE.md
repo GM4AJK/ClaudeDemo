@@ -12,9 +12,23 @@ Real-time digital IIR filter demo on STM32G431KB6 with automated Bode plot verif
 
 ## Build
 
-Builds are done exclusively in **STM32CubeIDE** (GUI). There is no Makefile or CLI build. Build output: `Debug/ClaudeDemo.elf`.
+Claude can build and flash autonomously from WSL2 using `powershell.exe` to invoke the Windows toolchain. Build output: `Debug/ClaudeDemo.elf`.
 
-Claude never builds, flashes, commits, or pushes. The user does all of these (commits are GPG-signed).
+### Build
+```bash
+powershell.exe -Command "
+\$env:PATH += ';C:\ST\STM32CubeIDE_1.12.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740\tools\bin;C:\ST\STM32CubeIDE_1.12.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.400.202601091506\tools\bin';
+& 'C:\ST\STM32CubeIDE_1.12.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.make.win32_2.2.100.202601091506\tools\bin\make.exe' -C 'C:\Users\kirkh\STM32CubeIDE\workspace_1.18.x\ClaudeDemo\Debug' all 2>&1"
+```
+
+### Flash
+```bash
+powershell.exe -Command "
+\$env:PATH += ';C:\ST\STM32CubeIDE_1.12.0\STM32CubeIDE\plugins\com.st.stm32cube.ide.mcu.externaltools.cubeprogrammer.win32_2.2.400.202601091506\tools\bin';
+STM32_Programmer_CLI.exe -c port=SWD -w 'C:\Users\kirkh\STM32CubeIDE\workspace_1.18.x\ClaudeDemo\Debug\ClaudeDemo.elf' -rst 2>&1"
+```
+
+Note: the PATH must be set inside the `powershell.exe -Command` call — it is not inherited from WSL2.
 
 ## Architecture
 
